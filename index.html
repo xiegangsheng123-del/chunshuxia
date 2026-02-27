@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>美甲店管理系统 (Supabase云端版)</title>
+    <!-- 引入 Tailwind CSS (CDN引入会有黄色警告，属于正常现象，完全不影响使用) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Vue 3 (已替换为 prod 生产版本，消除警告，运行更快) -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <!-- 引入 Supabase 云数据库 SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-gray-100 text-gray-800 font-sans relative pb-10">
+    <div id="app" class="max-w-5xl mx-auto p-3 md:p-6 pt-12 md:pt-10">
+        
+        <!-- 云端状态指示器 -->
+        <div class="absolute top-2 right-2 md:top-4 md:right-4 text-[10px] md:text-sm font-bold bg-white px-2 md:px-3 py-1 rounded-full shadow-sm z-10">
+            <span v-if="isCloudEnabled" class="text-green-500">☁️ 国际云端已同步 (线上版)</span>
+            <span v-else class="text-gray-400">💻 仅浏览器保存 (本地版)</span>
+        </div>
+
+        <h1 class="text-xl md:text-2xl font-bold text-center mb-5 md:mb-6 text-pink-500">🌸 美甲店管理系统</h1>
+
+        <!-- 导航 Tabs (H5 深度适配，无滚动条) -->
+        <div class="grid grid-cols-3 gap-2 md:flex md:space-x-4 md:justify-center mb-6">
+            <button @click="currentTab = 'schedule'" :class="currentTab === 'schedule' ? 'bg-pink-500 text-white shadow-md' : 'bg-white text-gray-600 shadow'" class="px-1 py-2 md:px-6 md:py-3 rounded-lg transition font-bold flex flex-col md:flex-row items-center justify-center text-xs md:text-base">
+                <span class="text-lg md:text-xl md:mr-1 mb-1 md:mb-0">📅</span><span>预约排班</span>
+            </button>
+            <button @click="currentTab = 'list'" :class="currentTab === 'list' ? 'bg-pink-500 text-white shadow-md' : 'bg-white text-gray-600 shadow'" class="px-1 py-2 md:px-6 md:py-3 rounded-lg transition font-bold flex flex-col md:flex-row items-center justify-center text-xs md:text-base">
+                <span class="text-lg md:text-xl md:mr-1 mb-1 md:mb-0">👑</span><span>会员列表</span>
+            </button>
+            <button @click="currentTab = 'addMember'" :class="currentTab === 'addMember' ? 'bg-pink-500 text-white shadow-md' : 'bg-white text-gray-600 shadow'" class="px-1 py-2 md:px-6 md:py-3 rounded-lg transition font-bold flex flex-col md:flex-row items-center justify-center text-xs md:text-base">
+                <span class="text-lg md:text-xl md:mr-1 mb-1 md:mb-0">➕</span><span>录入会员</span>
+            </button>
+        </div>
+
+        <!-- ==================== 1. 预约排班页面 ==================== -->
+        <div v-if="currentTab === 'schedule'">
+            <div class="flex flex-col sm:flex-row justify-between items-center bg-white p-4 rounded-lg shadow-sm mb-4 space-y-3 sm:space-y-0">
+                <div class="flex items-center space-x-3 w-full sm:w-auto">
+                    <label class="font-bold text-gray-700 whitespace-nowrap">查看日期：</label>
+                    <input type="date" v-model="scheduleDate" class="w-full sm:w-auto border-2 border-pink-200 rounded p-2 focus:outline-none focus:border-pink-400 font-bold text-pink-600 bg-pink-50 text-sm md:text-base">
+                </div>
+                <button @click="openAppointmentModal" class="w-full sm:w-auto bg-pink-500 text-white px-6 py-2 rounded-lg font-bold hover:bg-pink-600 shadow-md transition">
+                    + 新增预约
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                <!-- 66 的排班 -->
+                <div class="bg-white rounded-lg shadow-sm border-t-4 border-blue-400 p-3 md:p-4">
+                    <h3 class="text-lg font-bold text-center border-b pb-2 mb-4 text-blue-600">💅 美甲师：66 ({{ schedule66.length }})</h3>
+                    <div class="space-y-3">
+                        <div v-for="apt in schedule66" :key="apt.id" class="flex items-start p-3 bg-blue-50 rounded border border-blue-100 relative shadow-sm">
+                            <div class="font-bold text-blue-600 text-lg w-14 pt-1">{{ apt.time }}</div>
+                            <div class="flex-1 ml-2 pr-4">
+                                <div class="font-bold text-gray-800 text-base">{{ apt.customerName }} <span class="text-xs font-normal text-gray-500 ml-1">微信: {{ apt.wechat || '无' }}</span></div>
+                                <div class="text-sm text-gray-600 mt-1"><span class="bg-white border px-2 py-0.5 rounded text-blue-500 text-xs">{{ apt.project }}</span></div>
+                            </div>
+                            <button @click="deleteAppointment(apt.id)" class="absolute top-2 right-2 text-gray-400 hover:text-red-500 text-lg md:text-base">&times;</button>
+                        </div>
+                        <div v-if="schedule66.length === 0" class="text-center text-gray-400 py-6 text-sm">今日暂无安排</div>
+                    </div>
+                </div>
+
+                <!-- KIKI 的排班 -->
+                <div class="bg-white rounded-lg shadow-sm border-t-4 border-purple-400 p-3 md:p-4">
+                    <h3 class="text-lg font-bold text-center border-b pb-2 mb-4 text-purple-600">💅 美甲师：KIKI ({{ scheduleKiki.length }})</h3>
+                    <div class="space-y-3">
+                        <div v-for="apt in scheduleKiki" :key="apt.id" class="flex items-start p-3 bg-purple-50 rounded border border-purple-100 relative shadow-sm">
+                            <div class="font-bold text-purple-600 text-lg w-14 pt-1">{{ apt.time }}</div>
+                            <div class="flex-1 ml-2 pr-4">
+                                <div class="font-bold text-gray-800 text-base">{{ apt.customerName }} <span class="text-xs font-normal text-gray-500 ml-1">微信: {{ apt.wechat || '无' }}</span></div>
+                                <div class="text-sm text-gray-600 mt-1"><span class="bg-white border px-2 py-0.5 rounded text-purple-500 text-xs">{{ apt.project }}</span></div>
+                            </div>
+                            <button @click="deleteAppointment(apt.id)" class="absolute top-2 right-2 text-gray-400 hover:text-red-500 text-lg md:text-base">&times;</button>
+                        </div>
+                        <div v-if="scheduleKiki.length === 0" class="text-center text-gray-400 py-6 text-sm">今日暂无安排</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== 2. 录入新会员 ==================== -->
+        <div v-if="currentTab === 'addMember'" class="bg-white p-5 md:p-6 rounded-lg shadow-sm max-w-md mx-auto">
+            <h2 class="text-xl font-bold mb-4">录入新会员</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-1">姓名 <span class="text-red-500">*</span></label>
+                    <input v-model="newMember.name" type="text" class="w-full border rounded p-2 focus:ring-pink-300 focus:border-pink-300">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">手机号 <span class="text-red-500">*</span></label>
+                    <input v-model="newMember.phone" type="text" class="w-full border rounded p-2 focus:ring-pink-300 focus:border-pink-300" type="tel">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">微信号</label>
+                    <input v-model="newMember.wechat" type="text" class="w-full border rounded p-2 focus:ring-pink-300 focus:border-pink-300">
+                </div>
+                <button @click="saveMember" class="w-full bg-pink-500 text-white py-3 rounded-lg font-bold shadow hover:bg-pink-600">保存会员</button>
+            </div>
+        </div>
+
+        <!-- ==================== 3. 会员列表 ==================== -->
+        <div v-if="currentTab === 'list'">
+            <input v-model="searchQuery" type="text" class="w-full border-2 border-pink-100 rounded-lg p-3 mb-6 shadow-sm focus:outline-none focus:border-pink-400" placeholder="🔍 搜索姓名或手机号...">
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div v-for="member in filteredMembers" :key="member.id" class="bg-white p-4 md:p-5 rounded-lg shadow-sm border-t-4 border-pink-400 hover:shadow-md transition relative">
+                    <h3 class="text-lg font-bold text-gray-800">{{ member.name }}</h3>
+                    <p class="text-sm text-gray-500 mt-1">微信: {{ member.wechat || '无' }} | 手机: {{ member.phone }}</p>
+                    <div class="mt-3 flex space-x-2 md:space-x-4 text-xs md:text-sm bg-pink-50 p-2 md:p-3 rounded border border-pink-100">
+                        <div class="flex-1">累计实付: <br><span class="font-bold text-base md:text-lg text-red-500">¥{{ member.totalSpent }}</span></div>
+                        <div class="flex-1 border-l border-pink-200 pl-2 md:pl-4">可用积分: <br><span class="font-bold text-base md:text-lg text-blue-500">{{ member.points }}</span></div>
+                    </div>
+                    <div class="mt-4 flex space-x-2">
+                        <button @click="openConsumeModal(member)" class="flex-1 bg-gradient-to-r from-pink-400 to-pink-500 text-white px-3 py-2 rounded text-sm font-bold shadow">录入消费</button>
+                        <button @click="viewHistory(member)" class="flex-1 bg-gray-100 text-gray-600 px-3 py-2 rounded text-sm font-bold border">消费记录</button>
+                    </div>
+                </div>
+            </div>
+            <div v-if="filteredMembers.length === 0" class="text-center text-gray-400 mt-10">暂无匹配的会员数据</div>
+        </div>
+
+        <!-- ==================== A. 预约弹窗 ==================== -->
+        <div v-if="showAppointmentModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-3 z-50">
+            <div class="bg-white p-5 md:p-6 rounded-lg shadow-xl w-full max-w-sm">
+                <h2 class="text-lg font-bold mb-4 border-b pb-2">📆 录入预约</h2>
+                <div class="space-y-3 text-sm">
+                    <div><label class="block font-medium mb-1">客户名称 <span class="text-red-500">*</span></label><input v-model="newAppointment.customerName" type="text" class="w-full border rounded p-2 focus:border-pink-300 focus:ring-pink-300"></div>
+                    <div><label class="block font-medium mb-1">微信号</label><input v-model="newAppointment.wechat" type="text" class="w-full border rounded p-2 focus:border-pink-300 focus:ring-pink-300"></div>
+                    <div><label class="block font-medium mb-1">服务项目 <span class="text-red-500">*</span></label><input v-model="newAppointment.project" type="text" class="w-full border rounded p-2 focus:border-pink-300" placeholder="如：建构/手绘等"></div>
+                    <div class="flex space-x-2">
+                        <div class="flex-1"><label class="block font-medium mb-1">日期 *</label><input v-model="newAppointment.date" type="date" class="w-full border rounded p-2"></div>
+                        <div class="flex-1"><label class="block font-medium mb-1">时间 *</label><input v-model="newAppointment.time" type="time" class="w-full border rounded p-2"></div>
+                    </div>
+                    <div>
+                        <label class="block font-medium mb-1">指定美甲师 *</label>
+                        <select v-model="newAppointment.artist" class="w-full border rounded p-2 bg-white"><option value="66">66</option><option value="KIKI">KIKI</option></select>
+                    </div>
+                    <div class="flex space-x-3 pt-4 border-t mt-2">
+                        <button @click="showAppointmentModal = false" class="flex-1 bg-gray-100 border py-2.5 rounded font-bold text-gray-600">取消</button>
+                        <button @click="saveAppointment" class="flex-1 bg-pink-500 text-white py-2.5 rounded font-bold shadow">保存预约</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== B. 消费弹窗 ==================== -->
+        <div v-if="showConsumeModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-3 z-50">
+            <div class="bg-white p-5 md:p-6 rounded-lg shadow-xl w-full max-w-sm">
+                <h2 class="text-base md:text-lg font-bold mb-4 border-b pb-2 flex justify-between">
+                    <span>录入消费 - <span class="text-pink-600">{{ currentMember?.name }}</span></span>
+                    <span class="text-gray-400 text-xs md:text-sm pt-1">积分: {{ currentMember?.points }}</span>
+                </h2>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">服务美甲师</label>
+                        <select v-model="consumeData.technician" class="w-full border rounded p-2 bg-white"><option value="66">66</option><option value="KIKI">KIKI</option></select>
+                    </div>
+                    <div><label class="block text-sm font-medium mb-1">消费明细</label><input v-model="consumeData.detail" type="text" class="w-full border rounded p-2 focus:border-pink-300"></div>
+                    <div><label class="block text-sm font-medium mb-1">项目总金额 (元)</label><input v-model.number="consumeData.originalAmount" type="number" class="w-full border rounded p-2 font-bold text-red-500 focus:border-pink-300" type="number" inputmode="decimal"></div>
+
+                    <div class="bg-blue-50 p-3 rounded border border-blue-100" v-if="currentMember?.points > 0">
+                        <label class="flex items-center space-x-2 cursor-pointer text-xs md:text-sm font-bold text-blue-800">
+                            <input type="checkbox" v-model="consumeData.usePoints" class="w-4 h-4 rounded text-blue-600"><span>使用积分抵扣 (最多省 {{ maxUsablePoints }}元)</span>
+                        </label>
+                    </div>
+
+                    <div class="bg-gray-50 p-3 rounded text-sm space-y-1 border border-dashed border-gray-300">
+                        <div class="flex justify-between font-bold text-lg text-red-500 border-b border-gray-200 pb-1 mb-1"><span>客户实付:</span><span>¥ {{ actualPay }}</span></div>
+                        <div class="flex justify-between text-gray-600"><span>获得积分:</span><span>+{{ pointsEarned }}</span></div>
+                        <div class="flex justify-between font-bold text-blue-600 pt-1"><span>结算后积分变动:</span><span>{{ pointsChange > 0 ? '+'+pointsChange : pointsChange }}</span></div>
+                    </div>
+                    <div class="flex space-x-3 pt-2">
+                        <button @click="showConsumeModal = false" class="flex-1 bg-gray-100 border py-2.5 rounded font-bold text-gray-600">取消</button>
+                        <button @click="saveConsume" class="flex-1 bg-green-500 text-white py-2.5 rounded font-bold shadow">确认收款</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== C. 历史记录弹窗 ==================== -->
+        <div v-if="showHistoryModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-3 z-50">
+            <div class="bg-white p-5 md:p-6 rounded-lg shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col">
+                <h2 class="text-base md:text-lg font-bold mb-4 border-b pb-2 flex justify-between items-center">
+                    <span>💳 消费记录 - {{ currentMember?.name }}</span>
+                    <button @click="showHistoryModal = false" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+                </h2>
+                <div class="flex-1 overflow-y-auto space-y-3 pr-1">
+                    <div v-for="record in currentMemberRecords" :key="record.id" class="border p-4 rounded-lg bg-gray-50 relative shadow-sm">
+                        <span class="absolute top-3 right-3 bg-pink-100 text-pink-700 text-xs px-2 py-1 rounded font-bold">美甲师: {{ record.technician }}</span>
+                        <div class="font-bold text-sm md:text-base mb-2 pr-20">{{ record.detail }}</div>
+                        <div class="grid grid-cols-2 gap-2 text-xs md:text-sm bg-white p-2 rounded border mb-2">
+                            <div>原价: ¥{{ record.originalAmount }}</div><div class="text-red-500 font-bold">实付: ¥{{ record.actualAmount }}</div>
+                            <div v-if="record.deductedPoints > 0" class="text-blue-500 col-span-2 text-xs bg-blue-50 p-1.5 rounded">🔔 抵扣了 {{ record.deductedPoints }} 积分</div>
+                        </div>
+                        <div class="flex justify-between text-gray-400 text-xs border-t pt-2 mt-1">
+                            <span>{{ new Date(record.date).toLocaleString() }}</span>
+                            <span>积分变动: <span :class="record.pointsChange >= 0 ? 'text-green-500' : 'text-red-400'" class="font-bold">{{ record.pointsChange > 0 ? '+'+record.pointsChange : record.pointsChange }}</span></span>
+                        </div>
+                    </div>
+                    <div v-if="currentMemberRecords.length === 0" class="text-center text-gray-400 py-10">暂无消费记录</div>
+                </div>
+                <button @click="showHistoryModal = false" class="mt-4 w-full bg-gray-800 text-white py-3 rounded-lg font-bold shadow">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, watch, onMounted } = Vue;
+
+        createApp({
+            setup() {
+                // 已填入你的 Supabase 密钥
+                const SUPABASE_URL = "https://cfycarpfmfeqcqiiuute.supabase.co"; 
+                const SUPABASE_KEY = "sb_publishable_qFZn5fCZV_bf0kvmOSaLZA_X2icfnMb"; 
+
+                const isCloudEnabled = ref(SUPABASE_URL.startsWith('http'));
+                let supabaseClient = null;
+                if (isCloudEnabled.value) {
+                    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                }
+
+                // 生成唯一ID
+                const generateId = () => Date.now().toString() + '_' + Math.floor(Math.random() * 1000);
+
+                // UI 状态
+                const currentTab = ref('schedule');
+                const searchQuery = ref('');
+                // 修复排班默认时区问题，保证显示中国当天日期
+                const getToday = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().split('T')[0]; };
+                const scheduleDate = ref(getToday());
+
+                // 数据源
+                const members = ref([]);
+                const records = ref([]);
+                const appointments = ref([]);
+
+                // 弹窗与表单状态
+                const newMember = ref({ name: '', wechat: '', phone: '' });
+                const newAppointment = ref({ customerName: '', wechat: '', project: '', date: scheduleDate.value, time: '14:00', artist: '66' });
+                const consumeData = ref({ originalAmount: '', technician: '66', usePoints: false, pointsToUse: 0, detail: '' });
+                const showConsumeModal = ref(false), showHistoryModal = ref(false), showAppointmentModal = ref(false);
+                const currentMember = ref(null);
+
+                // --- Supabase 云端引擎 ---
+                const cloudDB = {
+                    async init() {
+                        if (!isCloudEnabled.value) return;
+                        try {
+                            const[m, r, a] = await Promise.all([
+                                supabaseClient.from('members').select('*'),
+                                supabaseClient.from('records').select('*'),
+                                supabaseClient.from('appointments').select('*')
+                            ]);
+                            if (m.data) members.value = m.data;
+                            if (r.data) records.value = r.data;
+                            if (a.data) appointments.value = a.data;
+                        } catch(e) { console.error("读取云端数据失败", e); }
+                    },
+                    async add(table, data) {
+                        if (!isCloudEnabled.value) return;
+                        await supabaseClient.from(table).insert(data);
+                    },
+                    async update(table, id, data) {
+                        if (!isCloudEnabled.value) return;
+                        await supabaseClient.from(table).update(data).eq('id', id);
+                    },
+                    async del(table, id) {
+                        if (!isCloudEnabled.value) return;
+                        await supabaseClient.from(table).delete().eq('id', id);
+                    }
+                };
+
+                // --- 初始化加载 ---
+                onMounted(async () => {
+                    if (isCloudEnabled.value) {
+                        await cloudDB.init(); // 自动拉取云端数据
+                    } else {
+                        // 本地测试缓存
+                        const sm = localStorage.getItem('nail_members_v4');
+                        if (sm) members.value = JSON.parse(sm);
+                        watch(members, (v) => localStorage.setItem('nail_members_v4', JSON.stringify(v)), { deep: true });
+                    }
+                });
+
+                // --- 计算属性 ---
+                const schedule66 = computed(() => appointments.value.filter(a => a.date === scheduleDate.value && a.artist === '66').sort((a, b) => a.time.localeCompare(b.time)));
+                const scheduleKiki = computed(() => appointments.value.filter(a => a.date === scheduleDate.value && a.artist === 'KIKI').sort((a, b) => a.time.localeCompare(b.time)));
+                const filteredMembers = computed(() => members.value.filter(m => m.name.includes(searchQuery.value) || m.phone.includes(searchQuery.value)));
+                const currentMemberRecords = computed(() => {
+                    if (!currentMember.value) return[];
+                    return records.value.filter(r => r.memberId === currentMember.value.id).sort((a, b) => b.date - a.date);
+                });
+
+                const maxUsablePoints = computed(() => currentMember.value ? Math.min(currentMember.value.points, Number(consumeData.value.originalAmount || 0)) : 0);
+                watch([() => consumeData.value.usePoints, () => consumeData.value.originalAmount], ([use]) => consumeData.value.pointsToUse = use ? maxUsablePoints.value : 0);
+                const actualPay = computed(() => Math.max(Number(consumeData.value.originalAmount || 0) - (consumeData.value.usePoints ? Number(consumeData.value.pointsToUse || 0) : 0), 0));
+                const pointsEarned = computed(() => Math.floor(actualPay.value / 10));
+                const pointsChange = computed(() => pointsEarned.value - (consumeData.value.usePoints ? Number(consumeData.value.pointsToUse || 0) : 0));
+
+                // --- 业务操作 ---
+                // 【已修复：找回漏掉的打开弹窗函数】
+                const openAppointmentModal = () => {
+                    newAppointment.value = { customerName: '', wechat: '', project: '', date: scheduleDate.value, time: '14:00', artist: '66' };
+                    showAppointmentModal.value = true;
+                };
+
+                const saveAppointment = async () => {
+                    if (!newAppointment.value.customerName || !newAppointment.value.project || !newAppointment.value.date) return alert('请填写必填项！');
+                    const objId = generateId();
+                    const obj = { id: objId, ...newAppointment.value };
+                    appointments.value.push(obj); 
+                    showAppointmentModal.value = false;
+                    scheduleDate.value = obj.date;
+                    
+                    await cloudDB.add('appointments', { 
+                        id: objId, "customerName": obj.customerName, wechat: obj.wechat, project: obj.project, date: obj.date, time: obj.time, artist: obj.artist 
+                    });
+                };
+
+                const deleteAppointment = async (id) => {
+                    if(confirm('确定要删除预约吗？')) {
+                        appointments.value = appointments.value.filter(a => a.id !== id);
+                        await cloudDB.del('appointments', id);
+                    }
+                };
+
+                const saveMember = async () => {
+                    if (!newMember.value.name || !newMember.value.phone) return alert('姓名和手机号不能为空！');
+                    const objId = generateId();
+                    const obj = { id: objId, ...newMember.value, totalSpent: 0, points: 0 };
+                    newMember.value = { name: '', wechat: '', phone: '' };
+                    members.value.unshift(obj);
+                    currentTab.value = 'list';
+                    
+                    await cloudDB.add('members', { 
+                        id: objId, name: obj.name, phone: obj.phone, wechat: obj.wechat, "totalSpent": 0, points: 0 
+                    });
+                };
+
+                const openConsumeModal = (member) => { currentMember.value = member; consumeData.value = { originalAmount: '', technician: '66', usePoints: false, pointsToUse: 0, detail: '' }; showConsumeModal.value = true; };
+                const viewHistory = (member) => { currentMember.value = member; showHistoryModal.value = true; };
+
+                const saveConsume = async () => {
+                    if (!consumeData.value.originalAmount || !consumeData.value.detail) return alert('请填写金额和明细！');
+                    
+                    const objId = generateId();
+                    const recordObj = { 
+                        id: objId, memberId: currentMember.value.id, technician: consumeData.value.technician, detail: consumeData.value.detail,
+                        originalAmount: Number(consumeData.value.originalAmount), actualAmount: actualPay.value, 
+                        deductedPoints: consumeData.value.usePoints ? Number(consumeData.value.pointsToUse) : 0, 
+                        pointsEarned: pointsEarned.value, pointsChange: pointsChange.value, date: Date.now()
+                    };
+                    
+                    records.value.unshift(recordObj);
+                    const mIdx = members.value.findIndex(m => m.id === currentMember.value.id);
+                    members.value[mIdx].totalSpent += actualPay.value;
+                    members.value[mIdx].points += pointsChange.value;
+                    showConsumeModal.value = false;
+
+                    await cloudDB.add('records', { 
+                        id: objId, "memberId": recordObj.memberId, technician: recordObj.technician, detail: recordObj.detail, 
+                        "originalAmount": recordObj.originalAmount, "actualAmount": recordObj.actualAmount, 
+                        "deductedPoints": recordObj.deductedPoints, "pointsEarned": recordObj.pointsEarned, 
+                        "pointsChange": recordObj.pointsChange, date: recordObj.date 
+                    });
+                    await cloudDB.update('members', currentMember.value.id, { "totalSpent": members.value[mIdx].totalSpent, points: members.value[mIdx].points });
+                };
+
+                return {
+                    isCloudEnabled, currentTab, searchQuery, members, filteredMembers, newMember, saveMember,
+                    showConsumeModal, showHistoryModal, currentMember, currentMemberRecords,
+                    consumeData, maxUsablePoints, actualPay, pointsEarned, pointsChange, openConsumeModal, saveConsume, viewHistory,
+                    scheduleDate, schedule66, scheduleKiki, showAppointmentModal, newAppointment, openAppointmentModal, saveAppointment, deleteAppointment
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
