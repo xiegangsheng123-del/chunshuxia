@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>美甲店管理系统 (Supabase云端版)</title>
-    <!-- 引入 Tailwind CSS (CDN引入会有黄色警告，属于正常现象，完全不影响使用) -->
+    <!-- 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入 Vue 3 (已替换为 prod 生产版本，消除警告，运行更快) -->
+    <!-- 引入 Vue 3 -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <!-- 引入 Supabase 云数据库 SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -22,7 +22,7 @@
 
         <h1 class="text-xl md:text-2xl font-bold text-center mb-5 md:mb-6 text-pink-500">🌸 美甲店管理系统</h1>
 
-        <!-- 导航 Tabs (H5 深度适配，无滚动条) -->
+        <!-- 导航 Tabs -->
         <div class="grid grid-cols-3 gap-2 md:flex md:space-x-4 md:justify-center mb-6">
             <button @click="currentTab = 'schedule'" :class="currentTab === 'schedule' ? 'bg-pink-500 text-white shadow-md' : 'bg-white text-gray-600 shadow'" class="px-1 py-2 md:px-6 md:py-3 rounded-lg transition font-bold flex flex-col md:flex-row items-center justify-center text-xs md:text-base">
                 <span class="text-lg md:text-xl md:mr-1 mb-1 md:mb-0">📅</span><span>预约排班</span>
@@ -147,7 +147,7 @@
             </div>
         </div>
 
-        <!-- ==================== B. 消费弹窗 ==================== -->
+        <!-- ==================== B. 消费弹窗 (已加消费日期) ==================== -->
         <div v-if="showConsumeModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-3 z-50">
             <div class="bg-white p-5 md:p-6 rounded-lg shadow-xl w-full max-w-sm">
                 <h2 class="text-base md:text-lg font-bold mb-4 border-b pb-2 flex justify-between">
@@ -155,9 +155,15 @@
                     <span class="text-gray-400 text-xs md:text-sm pt-1">积分: {{ currentMember?.points }}</span>
                 </h2>
                 <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium mb-1">服务美甲师</label>
-                        <select v-model="consumeData.technician" class="w-full border rounded p-2 bg-white"><option value="66">66</option><option value="KIKI">KIKI</option></select>
+                    <div class="flex space-x-2">
+                        <div class="flex-1">
+                            <label class="block text-sm font-medium mb-1">消费日期 <span class="text-red-500">*</span></label>
+                            <input v-model="consumeData.date" type="date" class="w-full border rounded p-2 bg-white">
+                        </div>
+                        <div class="flex-1">
+                            <label class="block text-sm font-medium mb-1">服务美甲师</label>
+                            <select v-model="consumeData.technician" class="w-full border rounded p-2 bg-white"><option value="66">66</option><option value="KIKI">KIKI</option></select>
+                        </div>
                     </div>
                     <div><label class="block text-sm font-medium mb-1">消费明细</label><input v-model="consumeData.detail" type="text" class="w-full border rounded p-2 focus:border-pink-300"></div>
                     <div><label class="block text-sm font-medium mb-1">项目总金额 (元)</label><input v-model.number="consumeData.originalAmount" type="number" class="w-full border rounded p-2 font-bold text-red-500 focus:border-pink-300" type="number" inputmode="decimal"></div>
@@ -181,7 +187,7 @@
             </div>
         </div>
 
-        <!-- ==================== C. 历史记录弹窗 ==================== -->
+        <!-- ==================== C. 历史记录弹窗 (已优化日期显示) ==================== -->
         <div v-if="showHistoryModal" class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-3 z-50">
             <div class="bg-white p-5 md:p-6 rounded-lg shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col">
                 <h2 class="text-base md:text-lg font-bold mb-4 border-b pb-2 flex justify-between items-center">
@@ -196,8 +202,8 @@
                             <div>原价: ¥{{ record.originalAmount }}</div><div class="text-red-500 font-bold">实付: ¥{{ record.actualAmount }}</div>
                             <div v-if="record.deductedPoints > 0" class="text-blue-500 col-span-2 text-xs bg-blue-50 p-1.5 rounded">🔔 抵扣了 {{ record.deductedPoints }} 积分</div>
                         </div>
-                        <div class="flex justify-between text-gray-400 text-xs border-t pt-2 mt-1">
-                            <span>{{ new Date(record.date).toLocaleString() }}</span>
+                        <div class="flex justify-between text-gray-500 text-xs border-t pt-2 mt-1">
+                            <span class="font-bold text-gray-600">日期: {{ new Date(record.date).toLocaleDateString() }}</span>
                             <span>积分变动: <span :class="record.pointsChange >= 0 ? 'text-green-500' : 'text-red-400'" class="font-bold">{{ record.pointsChange > 0 ? '+'+record.pointsChange : record.pointsChange }}</span></span>
                         </div>
                     </div>
@@ -225,12 +231,13 @@
 
                 // 生成唯一ID
                 const generateId = () => Date.now().toString() + '_' + Math.floor(Math.random() * 1000);
+                
+                // 获取本地今天日期
+                const getToday = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().split('T')[0]; };
 
                 // UI 状态
                 const currentTab = ref('schedule');
                 const searchQuery = ref('');
-                // 修复排班默认时区问题，保证显示中国当天日期
-                const getToday = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().split('T')[0]; };
                 const scheduleDate = ref(getToday());
 
                 // 数据源
@@ -241,7 +248,8 @@
                 // 弹窗与表单状态
                 const newMember = ref({ name: '', wechat: '', phone: '' });
                 const newAppointment = ref({ customerName: '', wechat: '', project: '', date: scheduleDate.value, time: '14:00', artist: '66' });
-                const consumeData = ref({ originalAmount: '', technician: '66', usePoints: false, pointsToUse: 0, detail: '' });
+                // 新增 date 字段，默认当天
+                const consumeData = ref({ originalAmount: '', technician: '66', usePoints: false, pointsToUse: 0, detail: '', date: getToday() });
                 const showConsumeModal = ref(false), showHistoryModal = ref(false), showAppointmentModal = ref(false);
                 const currentMember = ref(null);
 
@@ -302,7 +310,6 @@
                 const pointsChange = computed(() => pointsEarned.value - (consumeData.value.usePoints ? Number(consumeData.value.pointsToUse || 0) : 0));
 
                 // --- 业务操作 ---
-                // 【已修复：找回漏掉的打开弹窗函数】
                 const openAppointmentModal = () => {
                     newAppointment.value = { customerName: '', wechat: '', project: '', date: scheduleDate.value, time: '14:00', artist: '66' };
                     showAppointmentModal.value = true;
@@ -341,18 +348,26 @@
                     });
                 };
 
-                const openConsumeModal = (member) => { currentMember.value = member; consumeData.value = { originalAmount: '', technician: '66', usePoints: false, pointsToUse: 0, detail: '' }; showConsumeModal.value = true; };
+                // 打开消费记录时，每次都将日期重置为今天
+                const openConsumeModal = (member) => { 
+                    currentMember.value = member; 
+                    consumeData.value = { originalAmount: '', technician: '66', usePoints: false, pointsToUse: 0, detail: '', date: getToday() }; 
+                    showConsumeModal.value = true; 
+                };
                 const viewHistory = (member) => { currentMember.value = member; showHistoryModal.value = true; };
 
                 const saveConsume = async () => {
-                    if (!consumeData.value.originalAmount || !consumeData.value.detail) return alert('请填写金额和明细！');
+                    if (!consumeData.value.originalAmount || !consumeData.value.detail || !consumeData.value.date) return alert('请填写日期、金额和明细！');
                     
                     const objId = generateId();
+                    // 将选择的日期(如 2026-02-27) 转换成时间戳格式存储，方便排序
+                    const consumeTimestamp = new Date(consumeData.value.date).getTime();
+
                     const recordObj = { 
                         id: objId, memberId: currentMember.value.id, technician: consumeData.value.technician, detail: consumeData.value.detail,
                         originalAmount: Number(consumeData.value.originalAmount), actualAmount: actualPay.value, 
                         deductedPoints: consumeData.value.usePoints ? Number(consumeData.value.pointsToUse) : 0, 
-                        pointsEarned: pointsEarned.value, pointsChange: pointsChange.value, date: Date.now()
+                        pointsEarned: pointsEarned.value, pointsChange: pointsChange.value, date: consumeTimestamp
                     };
                     
                     records.value.unshift(recordObj);
